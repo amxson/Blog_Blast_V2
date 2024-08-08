@@ -96,3 +96,75 @@ export const getposts = async (req, res, next) => {
   }
 };
 
+
+export const deletepost = async (req, res, next) => {
+  // if (!req.user.isAdmin || req.user.id !== req.params.userId) {
+  //   return next(errorHandler(403, 'You are not allowed to delete this post'));
+  // }
+  try {
+    await Post.findByIdAndDelete(req.params.postId);
+    res.status(200).json('The post has been deleted');
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updatepost = async (req, res, next) => {
+  // if (req.user.id !== req.params.userId) {
+  //   return next(errorHandler(403, 'You are not allowed to update this post'));
+  // }
+  try {
+    const updatedPost = await Post.findByIdAndUpdate(
+      req.params.postId,
+      {
+        $set: {
+          title: req.body.title,
+          content: req.body.content,
+          category: req.body.category,
+          tag: req.body.tag,
+          image: req.body.image,
+        },
+      },
+      { new: true }
+    );
+    res.status(200).json(updatedPost);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const likePost = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    const userId = req.user.id;
+    const userIndex = post.likes.indexOf(userId);
+
+    if (userIndex === -1) {
+      post.numberOfLikes += 1;
+      post.likes.push(userId);
+
+
+      // Create a notification for the post owner
+      if (post.userId.toString() !== userId) {
+        const notification = new Notification({
+          userId: post.userId,
+          postId: post._id,
+          actionUserId: userId,
+          type: 'like',
+        });
+        await notification.save();
+      }
+      
+    } else {
+      post.numberOfLikes -= 1;
+      post.likes.splice(userIndex, 1);
+    }
+    await post.save();
+    res.status(200).json(post);
+  } catch (error) {
+    next(error);
+  }
+};
