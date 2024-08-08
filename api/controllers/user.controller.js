@@ -1,5 +1,5 @@
 import bcryptjs from 'bcryptjs';
-import { errorHandler } from '../utils/error.js';
+import { errorHandler } from '../middleware/error.js';
 import User from '../models/user.model.js';
 import Notification from '../models/notification.model.js';
 
