@@ -8,7 +8,7 @@ import DashUsers from '../components/DashUsers';
 import DashComments from '../components/DashComments';
 import DashFollowers from '../components/DashFollowers';
 import DashFollowing from '../components/DashFollowing';
-import DashboardComp from '../components/DashboardComp';
+import DashboardComp from '../../../../mern-blog/client/src/components/DashboardComp';
 
 export default function Dashboard() {
   const location = useLocation();
