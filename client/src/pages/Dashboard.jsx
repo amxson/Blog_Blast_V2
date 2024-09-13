@@ -22,22 +22,39 @@ export default function Dashboard() {
     }
   }, [location.search]);
 
+  const renderContent = () => {
+    switch (tab) {
+      case 'profile':
+        return <DashProfile />;
+      case 'notifications':
+        return <DashNotification />;
+      case 'posts':
+        return <DashPosts />;
+      case 'users':
+        return <DashUsers />;
+      case 'comments':
+        return <DashComments />;
+      case 'followers':
+        return <DashFollowers />;
+      case 'following':
+        return <DashFollowing />;
+      case 'dash':
+        return <DashboardComp />;
+      default:
+        return <DashPosts />; // Fallback to 'posts'
+    }
+  };
+
   return (
-    <div className='min-h-screen flex flex-col md:flex-row'>
-      <div className='md:w-56'>
+    <div className="min-h-screen flex flex-col md:flex-row">
+      <div className="md:w-56">
         {/* Sidebar */}
         <DashSidebar />
       </div>
-      {/* Render the corresponding component based on the tab */}
-      
-      {tab === 'profile' && <DashProfile />}
-      {tab === 'notifications' && <DashNotification />}
-      {tab === 'posts' && <DashPosts />}
-      {tab === 'users' && <DashUsers />}
-      {tab === 'comments' && <DashComments />}
-      {tab === 'followers' && <DashFollowers />}
-      {tab === 'following' && <DashFollowing />}
-      {tab === 'dash' && <DashboardComp />}
+      <div className="flex-1">
+        {/* Render the corresponding component based on the tab */}
+        {renderContent()}
+      </div>
     </div>
   );
 }
