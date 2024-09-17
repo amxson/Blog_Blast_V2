@@ -10,62 +10,73 @@ export default function PostPage() {
   const { postSlug } = useParams();
   const navigate = useNavigate();
   const currentUser = useSelector((state) => state.user.currentUser);
-  const [user, setUser] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [post, setPost] = useState(null);
-  const [liked, setLiked] = useState(false);
-  const [recentPosts, setRecentPosts] = useState([]);
-  const [following, setFollowing] = useState(false);
+
+  const [state, setState] = useState({
+    loading: true,
+    error: false,
+    post: null,
+    user: {},
+    liked: false,
+    recentPosts: [],
+    following: false,
+  });
+
+  const { loading, error, post, user, liked, recentPosts, following } = state;
 
   useEffect(() => {
     const fetchPost = async () => {
       try {
-        setLoading(true);
+        setState((prev) => ({ ...prev, loading: true }));
         const res = await fetch(`/api/post/getposts?slug=${postSlug}`);
         if (res.status === 401) {
           navigate('/sign-in');
           return;
         }
+
         const data = await res.json();
         if (!res.ok) {
-          setError(true);
-          setLoading(false);
-          return;
+          throw new Error();
         }
-        setPost(data.posts[0]);
-        setLoading(false);
-        setError(false);
+
+        setState((prev) => ({
+          ...prev,
+          post: data.posts[0],
+          loading: false,
+          error: false,
+        }));
       } catch (error) {
-        setError(true);
-        setLoading(false);
+        setState((prev) => ({ ...prev, loading: false, error: true }));
       }
     };
+
     fetchPost();
   }, [postSlug, navigate]);
 
   useEffect(() => {
-    if (post && post.userId) {
-      const getUser = async () => {
-        try {
-          const res = await fetch(`/api/user/${post.userId}`);
-          if (res.status === 401) {
-            navigate('/sign-in');
-            return;
-          }
-          const data = await res.json();
-          if (res.ok) {
-            setUser(data);
-            if (currentUser) {
-              setFollowing(data.followers.includes(currentUser._id));
-            }
-          }
-        } catch (error) {
-          console.log(error.message);
+    const getUserData = async () => {
+      if (!post || !post.userId) return;
+
+      try {
+        const res = await fetch(`/api/user/${post.userId}`);
+        if (res.status === 401) {
+          navigate('/sign-in');
+          return;
         }
-      };
-      getUser();
-    }
+
+        const data = await res.json();
+        if (res.ok) {
+          setState((prev) => ({
+            ...prev,
+            user: data,
+            following: currentUser ? data.followers.includes(currentUser._id) : false,
+          }));
+        }
+      } catch (error) {
+        console.error(error.message);
+      }
+    };
+
+    getUserData();
   }, [post, currentUser, navigate]);
 
   useEffect(() => {
@@ -76,9 +87,9 @@ export default function PostPage() {
           navigate('/sign-in');
           return;
         }
+
         const data = await res.json();
         if (res.ok) {
-          // Fetch user information for each recent post
           const recentPostsWithUser = await Promise.all(
             data.posts.map(async (recentPost) => {
               const userRes = await fetch(`/api/user/${recentPost.userId}`);
@@ -86,18 +97,23 @@ export default function PostPage() {
               return { ...recentPost, user: userData };
             })
           );
-          setRecentPosts(recentPostsWithUser);
+
+          setState((prev) => ({ ...prev, recentPosts: recentPostsWithUser }));
         }
       } catch (error) {
-        console.log(error.message);
+        console.error(error.message);
       }
     };
+
     fetchRecentPosts();
   }, [navigate]);
 
   useEffect(() => {
     if (post && currentUser) {
-      setLiked(post.likes.includes(currentUser._id));
+      setState((prev) => ({
+        ...prev,
+        liked: post.likes.includes(currentUser._id),
+      }));
     }
   }, [post, currentUser]);
 
@@ -117,88 +133,65 @@ export default function PostPage() {
         navigate('/sign-in');
         return;
       }
+
       const updatedPost = await res.json();
-      setPost(updatedPost);
-      setLiked(!liked);
+      setState((prev) => ({ ...prev, post: updatedPost, liked: !liked }));
     } catch (error) {
-      console.log(error.message);
+      console.error(error.message);
     }
   };
 
-  const handleFollow = async () => {
+  const handleFollowToggle = async (action) => {
     if (!currentUser) {
       navigate('/sign-in');
       return;
     }
 
-    if (following) return;
+    const endpoint = action === 'follow' ? 'follow' : 'unfollow';
+    const updateFollowing = action === 'follow' ? true : false;
 
     try {
-      const res = await fetch(`/api/user/follow/${user._id}`, {
+      const res = await fetch(`/api/user/${endpoint}/${user._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
+
       if (res.status === 401) {
         navigate('/sign-in');
         return;
       }
+
       if (res.ok) {
-        setFollowing(true);
-      } else {
-        const data = await res.json();
-        console.log(data.message);
+        setState((prev) => ({ ...prev, following: updateFollowing }));
       }
     } catch (error) {
-      console.log(error.message);
+      console.error(error.message);
     }
   };
 
-  const handleUnfollow = async () => {
-    if (!currentUser || !following) return;
-
-    try {
-      const res = await fetch(`/api/user/unfollow/${user._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      });
-      if (res.status === 401) {
-        navigate('/sign-in');
-        return;
-      }
-      if (res.ok) {
-        setFollowing(false);
-      } else {
-        const data = await res.json();
-        console.log(data.message);
-      }
-    } catch (error) {
-      console.log(error.message);
-    }
-  };
-
-  if (loading)
+  if (loading) {
     return (
       <div className='flex justify-center items-center min-h-screen'>
         <Spinner size='xl' />
       </div>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
       <div className='flex justify-center items-center min-h-screen'>
         <p>Error loading post</p>
       </div>
     );
+  }
 
   return (
     <main className='p-3 flex flex-col max-w-6xl mx-auto min-h-screen'>
       <h1 className='text-3xl mt-10 p-3 text-center font-serif max-w-2xl mx-auto lg:text-4xl'>
         {post && post.title}
       </h1>
-      
-      {/* Author Information */}
+
       {user && (
         <div className='flex items-center justify-center mt-5'>
           <p className='text-center flex items-center'>
@@ -211,13 +204,12 @@ export default function PostPage() {
               />
               <strong>{user.username}</strong>
             </Link>
-
           </p>
           {currentUser && user._id !== currentUser._id && (
             <Button
               color={following ? 'gray' : 'blue'}
               className='ml-4'
-              onClick={following ? handleUnfollow : handleFollow}
+              onClick={() => handleFollowToggle(following ? 'unfollow' : 'follow')}
             >
               {following ? 'Unfollow' : 'Follow'}
             </Button>
@@ -227,7 +219,7 @@ export default function PostPage() {
 
       {/* Tags Section */}
       <div className='flex flex-wrap gap-2 mt-4 justify-center'>
-        {post && post.tags && post.tags.length > 0 ? (
+        {post?.tags?.length > 0 ? (
           post.tags.map((tag, index) => (
             <Link key={index} to={`/search?tag=${tag}`}>
               <Button color='gray' pill size='xs'>
@@ -240,61 +232,45 @@ export default function PostPage() {
         )}
       </div>
 
-      <Link
-        to={`/search?category=${post && post.category}`}
-        className='self-center mt-5'
-      >
+      <Link to={`/search?category=${post?.category}`} className='self-center mt-5'>
         <Button color='gray' pill size='xs'>
-          {post && post.category}
+          {post?.category}
         </Button>
       </Link>
 
       <img
-        src={post && post.image}
-        alt={post && post.title}
+        src={post?.image}
+        alt={post?.title}
         className='mt-10 p-3 max-w-2xl mx-auto w-full object-cover'
       />
 
       <div className='flex justify-between p-3 border-b border-slate-500 mx-auto w-full max-w-2xl text-xs'>
         <span>{post && new Date(post.createdAt).toLocaleDateString()}</span>
         <span className='italic'>
-          {post && (post.content.length / 1000).toFixed(0)} mins read
+          {(post?.content?.length / 1000).toFixed(0)} mins read
         </span>
       </div>
+
       <div
         className='p-3 max-w-2xl mx-auto w-full post-content'
-        dangerouslySetInnerHTML={{ __html: post && post.content }}>
+        dangerouslySetInnerHTML={{ __html: post?.content }}
+      />
 
-        </div>
- 
-        <div className='flex items-center  w-full post-content p-3 max-w-2xl mx-auto'>
-  <button
-    onClick={handleLike}
-    className='mr-2 p-2'
-  >
-    <FaHeart
-      className={`w-6 h-6 ${liked ? 'text-red-500' : 'text-gray-500'}`}
-    />
-  </button>
-  <span>{post && post.numberOfLikes} likes</span>
-</div>
+      <div className='flex items-center w-full post-content p-3 max-w-2xl mx-auto'>
+        <button onClick={handleLike} className='mr-2 p-2'>
+          <FaHeart className={`w-6 h-6 ${liked ? 'text-red-500' : 'text-gray-500'}`} />
+        </button>
+        <span>{post?.numberOfLikes} likes</span>
+      </div>
 
-
-
-
-      <CommentSection postId={post && post._id} />
+      <CommentSection postId={post?._id} />
 
       <div className='flex flex-col justify-center items-center mb-5'>
         <h1 className='text-xl mt-5'>Recent articles</h1>
         <div className='flex flex-wrap gap-5 mt-5 justify-center'>
-          {recentPosts &&
-            recentPosts.map((recentPost) => (
-              <PostCard
-                key={recentPost._id}
-                post={recentPost}
-                user={recentPost.user}
-              />
-            ))}
+          {recentPosts.map((recentPost) => (
+            <PostCard key={recentPost._id} post={recentPost} user={recentPost.user} />
+          ))}
         </div>
       </div>
     </main>
