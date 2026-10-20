@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "./legacy-theme.css";
+@config "../tailwind.config.js";
+@source "../node_modules/flowbite-react/lib";
 
 body {
   height: 100vh;

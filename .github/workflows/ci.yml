@@ -1,0 +1,33 @@
+name: Quality checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  project-1:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "api"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: "api/package-lock.json"
+      - run: npm ci
+      - run: npm test
+  project-2:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "client"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: "client/package-lock.json"
+      - run: npm ci
+      - run: npm run build

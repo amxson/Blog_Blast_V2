@@ -1,16 +1,22 @@
-import Comment from '../models/comment.model.js';
-import Notification from '../models/notification.model.js';
-import Post from '../models/post.model.js';
-import errorHandler from '../utils/errorHandler.js'; // Ensure you have an errorHandler utility
+import Comment from "../models/comment.model.js";
+import Notification from "../models/notification.model.js";
+import Post from "../models/post.model.js";
+import { errorHandler } from "../middleware/error.js";
 
 export const createComment = async (req, res, next) => {
   try {
     const { content, postId, userId } = req.body;
 
     if (userId !== req.user.id) {
-      return next(errorHandler(403, 'You are not allowed to create this comment'));
+      return next(
+        errorHandler(403, "You are not allowed to create this comment"),
+      );
     }
 
+    const post = await Post.findById(postId);
+    if (!post) return next(errorHandler(404, "Post not found"));
+    if (typeof content !== "string" || !content.trim() || content.length > 5000)
+      return next(errorHandler(400, "Invalid comment"));
     const newComment = new Comment({
       content,
       postId,
@@ -18,14 +24,13 @@ export const createComment = async (req, res, next) => {
     });
     await newComment.save();
 
-    const post = await Post.findById(postId);
     if (post.userId.toString() !== userId) {
       const notification = new Notification({
         userId: post.userId,
         postId,
         commentId: newComment._id,
         actionUserId: userId,
-        type: 'comment',
+        type: "comment",
       });
       await notification.save();
     }
@@ -38,7 +43,9 @@ export const createComment = async (req, res, next) => {
 
 export const getPostComments = async (req, res, next) => {
   try {
-    const comments = await Comment.find({ postId: req.params.postId }).sort({ createdAt: -1 });
+    const comments = await Comment.find({ postId: req.params.postId }).sort({
+      createdAt: -1,
+    });
     res.status(200).json(comments);
   } catch (error) {
     next(error);
@@ -49,7 +56,7 @@ export const likeComment = async (req, res, next) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) {
-      return next(errorHandler(404, 'Comment not found'));
+      return next(errorHandler(404, "Comment not found"));
     }
 
     const userIndex = comment.likes.indexOf(req.user.id);
@@ -72,16 +79,18 @@ export const editComment = async (req, res, next) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) {
-      return next(errorHandler(404, 'Comment not found'));
+      return next(errorHandler(404, "Comment not found"));
     }
     if (comment.userId.toString() !== req.user.id && !req.user.isAdmin) {
-      return next(errorHandler(403, 'You are not allowed to edit this comment'));
+      return next(
+        errorHandler(403, "You are not allowed to edit this comment"),
+      );
     }
 
     const editedComment = await Comment.findByIdAndUpdate(
       req.params.commentId,
       { content: req.body.content },
-      { new: true }
+      { new: true },
     );
 
     res.status(200).json(editedComment);
@@ -94,14 +103,16 @@ export const deleteComment = async (req, res, next) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) {
-      return next(errorHandler(404, 'Comment not found'));
+      return next(errorHandler(404, "Comment not found"));
     }
     if (comment.userId.toString() !== req.user.id && !req.user.isAdmin) {
-      return next(errorHandler(403, 'You are not allowed to delete this comment'));
+      return next(
+        errorHandler(403, "You are not allowed to delete this comment"),
+      );
     }
 
     await Comment.findByIdAndDelete(req.params.commentId);
-    res.status(200).json({ message: 'Comment has been deleted' });
+    res.status(200).json({ message: "Comment has been deleted" });
   } catch (error) {
     next(error);
   }
@@ -109,12 +120,12 @@ export const deleteComment = async (req, res, next) => {
 
 export const getComments = async (req, res, next) => {
   if (!req.user.isAdmin) {
-    return next(errorHandler(403, 'You are not allowed to get all comments'));
+    return next(errorHandler(403, "You are not allowed to get all comments"));
   }
   try {
     const startIndex = parseInt(req.query.startIndex) || 0;
     const limit = parseInt(req.query.limit) || 9;
-    const sortDirection = req.query.sort === 'desc' ? -1 : 1;
+    const sortDirection = req.query.sort === "desc" ? -1 : 1;
 
     const comments = await Comment.find()
       .sort({ createdAt: sortDirection })

@@ -1,115 +1,101 @@
-import User from '../models/user.model.js';
-import bcryptjs from 'bcryptjs';
-import { errorHandler } from '../middleware/error.js';
-import jwt from 'jsonwebtoken';
+import { randomBytes } from "node:crypto";
+import User from "../models/user.model.js";
+import bcryptjs from "bcryptjs";
+import { errorHandler } from "../middleware/error.js";
+import { googleAuth } from "../services/googleAuth.js";
+import { sendSession } from "../services/session.js";
+
+const validEmail = (value) =>
+  typeof value === "string" &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) &&
+  value.length <= 254;
+const validPassword = (value) =>
+  typeof value === "string" &&
+  value.length >= 8 &&
+  Buffer.byteLength(value) <= 72;
 
 export const signup = async (req, res, next) => {
   const { username, email, password } = req.body;
-
   if (
-    !username ||
-    !email ||
-    !password ||
-    username === '' ||
-    email === '' ||
-    password === ''
+    typeof username !== "string" ||
+    !/^[a-z0-9]{7,20}$/.test(username) ||
+    !validEmail(email) ||
+    !validPassword(password)
   ) {
-    next(errorHandler(400, 'All fields are required'));
+    return next(
+      errorHandler(
+        400,
+        "Use a lowercase username of 7–20 letters or digits, a valid email, and a password of at least 8 characters (at most 72 bytes)",
+      ),
+    );
   }
-
-  const hashedPassword = bcryptjs.hashSync(password, 10);
-
-  const newUser = new User({
-    username,
-    email,
-    password: hashedPassword,
-  });
-
   try {
-    await newUser.save();
-    res.json('Signup successful');
+    await User.create({
+      username,
+      email: email.trim().toLowerCase(),
+      password: await bcryptjs.hash(password, 12),
+    });
+    return res.status(201).json("Signup successful");
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
 export const signin = async (req, res, next) => {
   const { email, password } = req.body;
-
-  if (!email || !password || email === '' || password === '') {
-    next(errorHandler(400, 'All fields are required'));
+  if (
+    !validEmail(email) ||
+    typeof password !== "string" ||
+    !password ||
+    Buffer.byteLength(password) > 72
+  ) {
+    return next(errorHandler(400, "Email and password are required"));
   }
-
   try {
-    const validUser = await User.findOne({ email });
-    if (!validUser) {
-      return next(errorHandler(404, 'User not found'));
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user || !(await bcryptjs.compare(password, user.password))) {
+      return next(errorHandler(401, "Invalid email or password"));
     }
-    const validPassword = bcryptjs.compareSync(password, validUser.password);
-    if (!validPassword) {
-      return next(errorHandler(400, 'Invalid password'));
-    }
-    const token = jwt.sign(
-      { id: validUser._id, isAdmin: validUser.isAdmin },
-      process.env.JWT_SECRET
-    );
-
-    const { password: pass, ...rest } = validUser._doc;
-
-    res
-      .status(200)
-      .cookie('access_token', token, {
-        httpOnly: true,
-      })
-      .json(rest);
+    return sendSession(user, res);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
 export const google = async (req, res, next) => {
-  const { email, name, googlePhotoUrl } = req.body;
+  let claims;
   try {
-    const user = await User.findOne({ email });
-    if (user) {
-      const token = jwt.sign(
-        { id: user._id, isAdmin: user.isAdmin },
-        process.env.JWT_SECRET
-      );
-      const { password, ...rest } = user._doc;
-      res
-        .status(200)
-        .cookie('access_token', token, {
-          httpOnly: true,
-        })
-        .json(rest);
-    } else {
-      const generatedPassword =
-        Math.random().toString(36).slice(-8) +
-        Math.random().toString(36).slice(-8);
-      const hashedPassword = bcryptjs.hashSync(generatedPassword, 10);
-      const newUser = new User({
-        username:
-          name.toLowerCase().split(' ').join('') +
-          Math.random().toString(9).slice(-4),
-        email,
-        password: hashedPassword,
-        profilePicture: googlePhotoUrl,
-      });
-      await newUser.save();
-      const token = jwt.sign(
-        { id: newUser._id, isAdmin: newUser.isAdmin },
-        process.env.JWT_SECRET
-      );
-      const { password, ...rest } = newUser._doc;
-      res
-        .status(200)
-        .cookie('access_token', token, {
-          httpOnly: true,
-        })
-        .json(rest);
-    }
+    claims = await googleAuth.verify(req.body.idToken);
   } catch (error) {
-    next(error);
+    return next(
+      errorHandler(
+        error.statusCode === 503 ? 503 : 401,
+        error.statusCode === 503
+          ? "Google sign-in is not configured"
+          : "Invalid Google identity",
+      ),
+    );
+  }
+  if (!validEmail(claims.email))
+    return next(errorHandler(401, "Verified email required"));
+  try {
+    const email = claims.email.trim().toLowerCase();
+    let user = await User.findOne({ email });
+    if (!user) {
+      const prefix =
+        (claims.name || "googleuser")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .slice(0, 10) || "googleuser";
+      user = await User.create({
+        username: prefix + randomBytes(4).toString("hex"),
+        email,
+        password: await bcryptjs.hash(randomBytes(32).toString("hex"), 12),
+        profilePicture: claims.picture,
+      });
+    }
+    return sendSession(user, res);
+  } catch (error) {
+    return next(error);
   }
 };

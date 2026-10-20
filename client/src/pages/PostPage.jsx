@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { Button, Spinner } from 'flowbite-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
@@ -253,7 +254,7 @@ export default function PostPage() {
 
       <div
         className='p-3 max-w-2xl mx-auto w-full post-content'
-        dangerouslySetInnerHTML={{ __html: post?.content }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post?.content || '') }}
       />
 
       <div className='flex items-center w-full post-content p-3 max-w-2xl mx-auto'>

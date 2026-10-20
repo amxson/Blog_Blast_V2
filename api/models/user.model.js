@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema(
       default:
         'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_960_720.png',
     },
+    tokenVersion: { type: Number, default: 0 },
     isAdmin: {
       type: Boolean,
       default: false,
